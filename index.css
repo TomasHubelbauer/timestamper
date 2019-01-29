@@ -1,0 +1,41 @@
+body {
+    font-family: sans-serif;
+}
+
+#mediaMedio {
+    width: 100%;
+}
+
+#previewDiv {
+    height: 4em;
+    overflow: auto;
+}
+
+#editorDiv {
+    display: flex;
+    align-items: center;
+}
+
+.stampDiv {
+    display: flex;
+    align-items: center;
+}
+
+.stampInput {
+    margin: 0 0 1em 0;
+    width: 100%;
+}
+
+.pivotStampDiv {
+    background: lightblue;
+    outline: lightblue;
+}
+
+.timeSpan {
+    font-family: monospace;
+    white-space: pre;
+}
+
+#saveButton {
+    margin-left: auto;
+}
