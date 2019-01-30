@@ -22,16 +22,19 @@ body {
     align-items: center;
 }
 
-.previewDiv {
+#lyricsDiv {
+    height: 10vh;
+    overflow: hidden;
+    position: relative;
+}
+
+.lyricDiv {
     display: inline-flex;
     flex-direction: column;
+    position: absolute;
 }
 
-.previewDiv span {
-    white-space: pre;
-}
-
-.previewDiv progress {
+.lyricDiv progress {
     /* `width: auto` doesn't work in Firefox so we need to use the combo of `min-width` and `width` */
     min-width: 100%;
     width: 0;

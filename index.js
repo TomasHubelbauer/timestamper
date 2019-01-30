@@ -4,8 +4,8 @@ window.addEventListener('load', _ => {
       return React.createElement(type);
     }
 
-    // Accepts object as props as long as it is not a React element instance ($$typeof === Symbol)
-    if (typeof propsAndOrChildren[0] === 'object' && !propsAndOrChildren[0].$$typeof) {
+    // Accepts object as props as long as it is an object which is not a React element instance ($$typeof === Symbol) or an array
+    if (typeof propsAndOrChildren[0] === 'object' && !(propsAndOrChildren[0] instanceof Array) && !propsAndOrChildren[0].$$typeof) {
       return React.createElement(type, propsAndOrChildren[0], ...propsAndOrChildren.slice(1));
     }
 
@@ -284,20 +284,27 @@ window.addEventListener('load', _ => {
             button({ onClick: this.onCloseButtonClick }, 'Close'),
             button({ onClick: this.onExportCsvButtonClick }, 'Export CSV'),
             button({ onClick: this.onExportJsonButtonClick }, 'Export JSON'),
-            
           ),
-          this.playerMedioNode && div(
+          this.playerMedioNode && this.playerMedioNode.duration && div(
             this.state.snippet !== undefined && div(
               `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex} from voice #${this.state.snippet.voiceIndex}`,
               this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex].text && ` "${this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex].text}"`,
               this.renderRange(this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex]),
             ),
-            this.state.voices[this.state.selectedVoiceIndex].stamps
-              .filter(stamp => stamp.startTime < this.playerMedioNode.currentTime && stamp.endTime > this.playerMedioNode.currentTime)
-              .map((stamp, index) => div({ key: index, className: 'previewDiv' },
+            div({ id: 'lyricsDiv' },
+              this.state.voices[this.state.selectedVoiceIndex].stamps.map((stamp, index) => div(
+                {
+                  key: index,
+                  className: 'lyricDiv',
+                  style: {
+                    left: `calc(50% - ${this.playerMedioNode.currentTime * 100}px)`,
+                    transform: `translate(calc(100% + ${stamp.startTime * 100}px), ${Math.round(this.getSeededRandom(index) * 4)}em)`,
+                  },
+                },
                 stamp.text,
-                stamp.endTime && progress({ max: stamp.endTime - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
+                progress({ max: (stamp.endTime || this.playerMedioNode.duration) - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
               )),
+            ),
           ),
         ),
         this.state.media && this.state.voices.map((voice, index) => button({ key: index, disabled: index === this.state.selectedVoiceIndex }, voice.name)),
@@ -333,6 +340,11 @@ window.addEventListener('load', _ => {
       }
 
       return ` from ${getTimestamp(stamp.startTime)}.`;
+    }
+
+    getSeededRandom(seed) {
+      const x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
     }
 
     getStamps() {
