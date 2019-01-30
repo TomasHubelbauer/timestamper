@@ -383,6 +383,7 @@ window.addEventListener('load', _ => {
         () => {
           this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime - App.PREVIEW_HEADSUP);
           this.playerMedioNode.play();
+          this.persistStamps();
         }
       );
     }
@@ -397,6 +398,7 @@ window.addEventListener('load', _ => {
         () => {
           this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].endTime - App.PREVIEW_HEADSUP);
           this.playerMedioNode.play();
+          this.persistStamps();
         }
       );
     }
