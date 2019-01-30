@@ -17,14 +17,14 @@ open index.html
 
 - Work through the `TODO` comments continuously
 - [ ] Add tab close warning handler if open file / timestamps for Chrome, Firefox & Safari
-- [ ] Implement writing the timestamps to the file if the format supports metadata (like ID3), in a standardized way if one or proprietary if none
-- [ ] Implement loading the timestamps / lyrics from a file if it contains any
-- [ ] Implement importing stamps from a JSON or CSV export
+- [ ] Implement reading lyrics from a file if it contains any in its metadata (MP4, MP4, FLAC)
+  - https://github.com/borewit/music-metadata
+- [ ] Implement importing stamps from a JSON or CSV export files
 - [ ] Make time stamps in the list editable - input with pattern
 - [ ] Implement a button for splitting the current line per word into multiple lines for word-level adjustments
 - [ ] Consider https://jsxdirect.com/
 - [ ] Add support for multiple voices (tabs with names)
-- [ ] Test in Chrome and Safari properly
+- [ ] Add UI tests with Puppeteer running in Azure Pipelines
 - [ ] Implement mobile friendly responsive design
 - [ ] Apply the answer of the [`progress` minimal width question](https://stackoverflow.com/q/54431564/2715716)
 - [ ] Consider animating the items on a horizontal timeline in preview
