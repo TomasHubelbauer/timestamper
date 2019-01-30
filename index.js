@@ -75,9 +75,9 @@ window.addEventListener('load', _ => {
       };
 
       this.onStopButtonClick = _ => {
-        this.setState({ snippet: undefined });
         this.playerMedioNode.pause();
-        this.playerMedioNode.currentTime = 0;
+        this.playerMedioNode.currentTime = seekSafely(this.state.snippet.endTime || this.state.snippet.startTime);
+        this.setState({ snippet: undefined });
       };
 
       this.playerMedioRef = node => {
@@ -212,7 +212,7 @@ window.addEventListener('load', _ => {
         const index = Number(event.currentTarget.dataset.index);
         const stamp = this.state.voices[this.state.selectedVoiceIndex].stamps[index];
         this.setState({ snippet: { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index } }, () => {
-          this.seekSafely(stamp.startTime);
+          this.seekSafely(stamp.startTime - App.PREVIEW_HEADSUP);
           this.playerMedioNode.play();
         });
       };
@@ -381,7 +381,7 @@ window.addEventListener('load', _ => {
           return { snippet, voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
         },
         () => {
-          this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime);
+          this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime - App.PREVIEW_HEADSUP);
           this.playerMedioNode.play();
         }
       );
@@ -395,7 +395,7 @@ window.addEventListener('load', _ => {
           return { snippet, voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
         },
         () => {
-          this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime);
+          this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].endTime - App.PREVIEW_HEADSUP);
           this.playerMedioNode.play();
         }
       );
@@ -440,10 +440,8 @@ window.addEventListener('load', _ => {
               this.seekSafely(stamp.startTime);
             }
           } else {
-            // Stop previewing when the snippet ends or the user scrubs outside of it
-            if (stamp.startTime > this.playerMedioNode.currentTime) {
-              this.setState({ snippet: undefined });
-            } else if (this.playerMedioNode.currentTime > stamp.endTime) {
+            // Stop previewing once the snippet ends (ignore playback before snippet start time - `App.PREVIEW_HEADSUP` causes that)
+            if (this.playerMedioNode.currentTime > stamp.endTime) {
               this.playerMedioNode.pause();
               this.seekSafely(stamp.endTime || stamp.startTime);
               this.setState({ snippet: undefined });
@@ -488,6 +486,8 @@ window.addEventListener('load', _ => {
       }, true /* Listen to the event before it hits event targets */);
     }
   }
+
+  App.PREVIEW_HEADSUP = 1;
 
   ReactDOM.render(React.createElement(App), document.querySelector('#app'));
 
