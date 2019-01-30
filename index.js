@@ -298,7 +298,7 @@ window.addEventListener('load', _ => {
                   className: 'lyricDiv',
                   style: {
                     left: `calc(50% - ${this.playerMedioNode.currentTime * 100}px)`,
-                    transform: `translate(calc(100% + ${stamp.startTime * 100}px), ${Math.round(this.getSeededRandom(index) * 4)}em)`,
+                    transform: `translate(calc(0% + ${stamp.startTime * 100}px), ${Math.round(this.getSeededRandom(index) * 4)}em)`,
                   },
                 },
                 stamp.text,
