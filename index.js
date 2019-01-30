@@ -154,7 +154,7 @@ window.addEventListener('load', _ => {
         const index = Number(event.currentTarget.dataset.index);
         const stamp = this.state.voices[this.state.selectedVoiceIndex].stamps[index];
         this.setState({ snippet: { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index, loop: true } });
-        this.playerMedioNode.currentTime = stamp.startTime;
+        this.seekSafely(stamp.startTime);
         // Ensure the playback is ongoing
         this.playerMedioNode.play();
       };
@@ -212,7 +212,7 @@ window.addEventListener('load', _ => {
         const index = Number(event.currentTarget.dataset.index);
         const stamp = this.state.voices[this.state.selectedVoiceIndex].stamps[index];
         this.setState({ snippet: { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index } }, () => {
-          this.playerMedioNode.currentTime = stamp.startTime;
+          this.seekSafely(stamp.startTime);
           this.playerMedioNode.play();
         });
       };
@@ -376,12 +376,12 @@ window.addEventListener('load', _ => {
     moveStartTime(index, delta) {
       this.setState(
         state => {
-          const snippet = { stampIndex: index, loop: state.snippet && state.snippet.loop };
+          const snippet = { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index, loop: state.snippet && state.snippet.loop };
           const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.map((stamp, i) => i === index ? { ...stamp, startTime: stamp.startTime + delta } : stamp) ];
           return { snippet, voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
         },
         () => {
-          this.playerMedioNode.currentTime = this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime;
+          this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime);
           this.playerMedioNode.play();
         }
       );
@@ -390,12 +390,12 @@ window.addEventListener('load', _ => {
     moveEndTime(index, delta) {
       this.setState(
         state => {
-          const snippet = { stampIndex: index, loop: state.snippet && state.snippet.loop };
+          const snippet = { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index, loop: state.snippet && state.snippet.loop };
           const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.map((stamp, i) => i === index ? { ...stamp, endTime: stamp.endTime ? stamp.endTime + delta : undefined } : stamp) ];
           return { snippet, voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
         },
         () => {
-          this.playerMedioNode.currentTime = this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime;
+          this.seekSafely(this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime);
           this.playerMedioNode.play();
         }
       );
@@ -412,6 +412,20 @@ window.addEventListener('load', _ => {
       localStorage.setItem(`timestamper-${this.state.media.name}`, JSON.stringify(this.state.voices));
     }
 
+    seekSafely(time) {
+      // Note that the medio element has time precision or 6 decimal places and we need to avoid a loop like this:
+      // 1. We set the current time to start time, 0.123456000000001 (artifact of adding .1 or .01)
+      // 2. The player stores it and in the next tick trims it down to 6 decimal places: 0.123456
+      // 3. Current time is now 0.123456 but start time is still 0.123456000000001
+      // 4. Current time < start time so we set the current time to start time
+      // 5. Go to 2 - this loops endlessly, occasionally it breaks out (dropped frames while encoding?), but it stutters
+
+      // Calculate an factor which will shift the six digits of precision in the decimal part to the integer part and back
+      const power = Math.pow(10, 6);
+      // Note that epsilon here is the smallest number by which we can increment the time while still staying in the medio element's precision boundary
+      this.playerMedioNode.currentTime = /* Truncate */ ~~(time * power /* Shift fractional part to integer part */ + 1 /* Bump by epsilon */) / power /* Shift back */;
+    }
+
     componentDidMount() {
       // Note that `timeupdate` is too infrequent (Firefox ~300 ms, Chrome ~200 ms, Safari N/A) so we use RAF instead
       const raf = () => {
@@ -423,15 +437,15 @@ window.addEventListener('load', _ => {
           if (this.state.snippet.loop) {
             // Confine the playback range to the start and end (if any) time of the stamp
             if (stamp.startTime > this.playerMedioNode.currentTime || this.playerMedioNode.currentTime > stamp.endTime) {
-              this.playerMedioNode.currentTime = stamp.startTime;
+              this.seekSafely(stamp.startTime);
             }
           } else {
-            // Reset snippet if scrubbed before it to replay, stop previewing it when it ends
+            // Stop previewing when the snippet ends or the user scrubs outside of it
             if (stamp.startTime > this.playerMedioNode.currentTime) {
-              this.playerMedioNode.currentTime = stamp.startTime;
+              this.setState({ snippet: undefined });
             } else if (this.playerMedioNode.currentTime > stamp.endTime) {
               this.playerMedioNode.pause();
-              this.playerMedioNode.currentTime = stamp.endTime || stamp.startTime;
+              this.seekSafely(stamp.endTime || stamp.startTime);
               this.setState({ snippet: undefined });
             }
           }
