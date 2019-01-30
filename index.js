@@ -1,18 +1,31 @@
 window.addEventListener('load', _ => {
+  const tag = (type, propsAndOrChildren) => {
+    if (propsAndOrChildren.length === 0) {
+      return React.createElement(type);
+    }
+
+    if (typeof propsAndOrChildren[0] === 'object') {
+      return React.createElement(type, propsAndOrChildren[0], ...propsAndOrChildren.slice(1));
+    }
+
+    return React.createElement(type, undefined, ...propsAndOrChildren);
+  }
+
   const audio = (props) => React.createElement('audio', props);
-  const button = (props, ...children) => React.createElement('button', props, ...children);
-  const div = (props, ...children) => React.createElement('div', props, ...children);
-  const h1 = (props, ...children) => React.createElement('h1', props, ...children);
-  const hr = (props) => React.createElement('hr', props);
+  const button = (...propsAndOrChildren) => tag('button', propsAndOrChildren);
+  const div = (...propsAndOrChildren) => tag('div', propsAndOrChildren);
+  const h1 = (...propsAndOrChildren) => tag('h1', propsAndOrChildren);
   const input = (props) => React.createElement('input', props);
   const progress = (props) => React.createElement('progress', props);
-  const span = (props, ...children) => React.createElement('span', props, ...children);
+  const span = (...propsAndOrChildren) => tag('span', propsAndOrChildren);
 
   class App extends React.Component {
     constructor(props) {
       super(props);
       this.state = {
+        media: undefined,
         stamps: [],
+        snippet: undefined,
       };
 
       this.onMediaInputChange = event => {
@@ -44,7 +57,14 @@ window.addEventListener('load', _ => {
         // See if we have persisted any stamps for the file being opened
         const stamps = localStorage.getItem(`timestamper-${file.name}`);
         if (stamps !== null) {
-          this.setState({ stamps: JSON.parse(stamps) });
+          this.setState({ stamps: JSON.parse(stamps) }, () => {
+            // Focus the text input of the pivot stamp
+            const pivotStampIndex = this.getPivotIndex(this.state.stamps);
+            if (pivotStampIndex !== -1) {
+              document.querySelector(`input[data-index="${pivotStampIndex}"]`).focus();
+              document.querySelector(`input[data-index="${pivotStampIndex}"]`).click();
+            }
+          });
         }
       };
 
@@ -55,39 +75,69 @@ window.addEventListener('load', _ => {
       };
 
       this.playerMedioRef = node => {
-        this.playerMedioNode = node;
         if (node === null) {
           // Collect the existing URL to prevent memory leaks
-          URL.revokeObjectURL(this.state.src);
+          URL.revokeObjectURL(this.playerMedioNode.src);
         }
-      };
 
-      this.onHelpButtonClick = _ => {
-        alert(this.shortcuts.map(shortcut => shortcut.key + '\n    ' + shortcut.title + '\n').join('\n'));
+        this.playerMedioNode = node;
       };
 
       this.onTimeStartButtonClick = _ => {
         const stamp = { startTime: this.playerMedioNode.currentTime, text: '' };
+        let index;
         // Sort the stamps to always be chronological no matter the order they were entered in
-        this.setState(state => ({ stamps: [...state.stamps, stamp].sort((a, b) => a.time - b.time) }), this.persistStamps);
+        this.setState(state => {
+          const stamps = [...state.stamps, stamp].sort((a, b) => a.time - b.time);
+          index = stamps.indexOf(stamp);
+          return { stamps };
+        }, () => {
+          this.revealStamp(index);
+          this.persistStamps();
+        });
       };
 
       this.onTimeEndButtonClick = _ => {
+        let index;
         this.setState(state => {
-          const stamp = state.stamps.filter(s => s.endTime === undefined && s.startTime < this.playerMedioNode.currentTime)[0];
-          const index = state.stamps.indexOf(stamp);
+          index = this.getPivotIndex(state.stamps);
           return { stamps: [...state.stamps.map((s, i) => i === index ? { ...s, endTime: this.playerMedioNode.currentTime } : s)] };
-        }, this.persistStamps);
+        }, () => {
+          this.revealStamp(index);
+          this.persistStamps();
+        });
       };
 
       this.onSpeedInputChange= event => {
         this.playerMedioNode.playbackRate = event.currentTarget.value;
       };
 
-      this.onSaveButtonClick = _ => {
+      this.onHelpButtonClick = _ => {
+        alert(this.shortcuts.map(shortcut => shortcut.key + '\n    ' + shortcut.title + '\n').join('\n'));
+      };
+
+      this.onCloseButtonClick = _ => {
+        if (this.state.stamps.length > 0 && !confirm('Do you really want to close these stamps?')) {
+          return;
+        }
+
+        // Reset the application state causing the player to unmount and the file URL to be collected
+        this.setState({ media: undefined, stamps: [], snippet: undefined });
+      };
+
+      this.onExportJsonButtonClick = _ => {
         const downloadA = document.createElement('a');
-        downloadA.download = this.state.media.name + '.stamps';
+        downloadA.download = this.state.media.name + '.stamps.json';
         downloadA.href = `data:application/json;charset=utf8,` + encodeURIComponent(JSON.stringify({ name: this.state.media.name, stamps: this.state.stamps }, null, 2));
+        document.body.appendChild(downloadA);
+        downloadA.click();
+        downloadA.remove();
+      };
+
+      this.onExportCsvButtonClick = _ => {
+        const downloadA = document.createElement('a');
+        downloadA.download = this.state.media.name + '.stamps.csv';
+        downloadA.href = `data:text/csv;charset=utf8,Start Time,End Time,Text\n` + encodeURIComponent(this.state.stamps.map(s => `${s.startTime},${s.endTime},${s.text}`).join('\n') + '\n');
         document.body.appendChild(downloadA);
         downloadA.click();
         downloadA.remove();
@@ -164,8 +214,9 @@ window.addEventListener('load', _ => {
 
       this.shortcuts = [
         { key: 'Space', title: 'Toggle playback', context: ['page', 'player'], action: () => this.playerMedioNode.paused ? this.playerMedioNode.play() : this.playerMedioNode.pause() },
+        { key: 'Ctrl+Space', title: 'Toggle playback (in editor)', context: ['editor'], action: () => this.playerMedioNode.paused ? this.playerMedioNode.play() : this.playerMedioNode.pause() },
         { key: 'Enter', id: 'open', title: 'Open a new stamp', context: ['page', 'player', 'editor'], action: this.onTimeStartButtonClick },
-        { key: 'Escape', id: 'close', title: 'Close longest open stamp prior to current time', context: ['page', 'player', 'editor'], action: this.onTimeEndButtonClick },
+        { key: 'Alt+Enter', id: 'close', title: 'Close the closets open stamp prior to current time', context: ['page', 'player', 'editor'], action: this.onTimeEndButtonClick },
         { key: 'Ctrl+ArrowUp', title: 'Speed up the playback', context: ['page', 'player', 'editor'], action: () => this.playerMedioNode.playbackRate += .1 },
         { key: 'Ctrl+ArrowDown', title: 'Slow down the playback', context: ['page', 'player', 'editor'], action: () => this.playerMedioNode.playbackRate -= .1 },
         { key: 'ArrowUp', title: 'Go to the above text editor', context: ['editor'], action: (editorInput) => {
@@ -192,40 +243,46 @@ window.addEventListener('load', _ => {
     }
   
     render() {
+      const pivotStampIndex = this.playerMedioNode && this.getPivotIndex(this.state.stamps);
       return div({},
-        h1({}, 'Timestamper', this.state.media && ' - ' + this.state.media.name),
-        input({ type: 'file', accept: 'audio/*,video/*', onChange: this.onMediaInputChange }),
-        // Prevent the audio/video from taking focus with negative tab index in order not to break the Enter & Space keyboard shortcuts
-        // Mind the audio/video ID as it is used for styling
-        this.state.media && this.getPlayer(this.state.media.type)({ controls: true, tabIndex: -1, id: 'mediaMedio', ref: this.playerMedioRef, src: this.state.media.src }),
-        this.playerMedioNode && div({ id: 'previewDiv' },
-          this.state.snippet !== undefined && div({},
-            `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex}`,
-            this.state.stamps[this.state.snippet.stampIndex].text && ` "${this.state.stamps[this.state.snippet.stampIndex].text}"`,
-            this.renderRange(this.state.stamps[this.state.snippet.stampIndex]),
+        !this.state.media && h1('Timestamper'),
+        !this.state.media && input({ type: 'file', accept: 'audio/*,video/*', onChange: this.onMediaInputChange }),
+        this.state.media && div({ id: 'panelDiv' },
+          // Prevent the audio/video from taking focus with negative tab index in order not to break the Enter & Space keyboard shortcuts
+          // Mind the audio/video ID as it is used for styling
+          this.getPlayer(this.state.media.type)({ controls: true, tabIndex: -1, id: 'mediaMedio', ref: this.playerMedioRef, src: this.state.media.src }),
+          this.playerMedioNode && div({ id: 'editorDiv' },
+            this.state.media.name + ' ·',
+            span({ id: 'timeSpan', className: 'timeSpan' }, getTimestamp(this.playerMedioNode.currentTime)),
+            '·',
+            button({ onClick: this.onTimeStartButtonClick, title: this.getShortcut('open') }, 'Time start'),
+            button({ onClick: this.onTimeEndButtonClick, title: this.getShortcut('close') }, 'Time end'),
+            '· Speed:',
+            input({ type: 'range', min: .25, max: 1.5, step: .01, value: this.playerMedioNode.playbackRate, onChange: this.onSpeedInputChange }),
+            this.playerMedioNode.playbackRate.toFixed(2),
+            button({ onClick: this.onHelpButtonClick, id: 'helpButton' }, 'Help'),
+            button({ onClick: this.onCloseButtonClick }, 'Close'),
+            button({ onClick: this.onExportCsvButtonClick }, 'Export CSV'),
+            button({ onClick: this.onExportJsonButtonClick }, 'Export JSON'),
+            
           ),
-          this.playerMedioNode && this.state.stamps
-            .filter(stamp => stamp.startTime < this.playerMedioNode.currentTime && stamp.endTime > this.playerMedioNode.currentTime)
-            .map((stamp, index) => div({ key: index },
-              stamp.text || this.renderRange(stamp),
-              stamp.endTime && progress({ max: stamp.endTime - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
-            )),
+          this.playerMedioNode && div(
+            this.state.snippet !== undefined && div(
+              `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex}`,
+              this.state.stamps[this.state.snippet.stampIndex].text && ` "${this.state.stamps[this.state.snippet.stampIndex].text}"`,
+              this.renderRange(this.state.stamps[this.state.snippet.stampIndex]),
+            ),
+            this.state.stamps
+              .filter(stamp => stamp.startTime < this.playerMedioNode.currentTime && stamp.endTime > this.playerMedioNode.currentTime)
+              .map((stamp, index) => div({ key: index, className: 'previewDiv' },
+                span(stamp.text),
+                stamp.endTime && progress({ max: stamp.endTime - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
+              )),
+          ),
         ),
-        this.playerMedioNode && hr(),
-        this.playerMedioNode && div({ id: 'editorDiv' },
-          span({ id: 'timeSpan', className: 'timeSpan' }, getTimestamp(this.playerMedioNode.currentTime)),
-          button({ onClick: this.onTimeStartButtonClick, title: this.getShortcut('open') }, 'Time start'),
-          button({ onClick: this.onTimeEndButtonClick, title: this.getShortcut('close') }, 'Time end'),
-          'Speed:',
-          input({ type: 'range', min: .25, max: 1.5, step: .01, value: this.playerMedioNode.playbackRate, onChange: this.onSpeedInputChange }),
-          this.playerMedioNode.playbackRate.toFixed(2),
-          button({ id: 'saveButton', onClick: this.onSaveButtonClick }, 'Save'),
-          button({ onClick: this.onHelpButtonClick }, 'Help'),
-        ),
-        this.playerMedioNode && hr(),
         this.state.stamps.map((stamp, index) => {
-          return div({ key: index },
-            div({ className: 'stampDiv' },
+          return div({ key: index, className: index === pivotStampIndex ? 'stampDiv pivotStampDiv' : 'stampDiv' },
+            div({ className: 'toolDiv' },
               this.state.snippet && this.state.snippet.stampIndex === index
                 ? button({ onClick: this.onStopButtonClick, title: this.getShortcut('stop') }, '■')
                 : button({ 'data-index': index, onClick: this.onLoopButtonClick, title: this.getShortcut('loop') }, '▶'),
@@ -240,11 +297,37 @@ window.addEventListener('load', _ => {
               stamp.endTime && button({ 'data-index': index, onClick: this.onMoveEnd10MillisecondsForwardsButtonClick, title: this.getShortcut('end-forth-10') }, '+10 ms'),
               stamp.endTime && button({ 'data-index': index, onClick: this.onMoveEnd100MillisecondsForwardsButtonClick, title: this.getShortcut('end-forth-100') }, '+100 ms'),
               button({ 'data-index': index, onClick: this.onDeleteButtonClick }, 'Delete'),
+              '#' + index,
             ),
-            input({ className: 'stampInput', value: stamp.text, 'data-index': index, onChange: this.onTextInputChange, onClick: this.onTextInputClick }),
+            input({ value: stamp.text, 'data-index': index, onChange: this.onTextInputChange, onClick: this.onTextInputClick }),
           );
         }),
       );
+    }
+
+    renderRange(stamp) {
+      if (stamp.endTime !== undefined) {
+        return ` between ${getTimestamp(stamp.startTime)} and ${getTimestamp(stamp.endTime)}.`;
+      }
+
+      return ` from ${getTimestamp(stamp.startTime)}.`;
+    }
+
+    getPlayer(type) {
+      if (type === 'audio') return audio;
+      if (type === 'video') return video;
+      throw new Error(`Unexpected media type ${type}. Expected 'audio' or 'video'.`);
+    }
+
+    getPivotIndex(stamps) {
+      // Find the closets open stamp before the current time
+      const stamp = stamps.filter(s => s.endTime === undefined && s.startTime < this.playerMedioNode.currentTime).slice(-1)[0];
+      return stamps.indexOf(stamp);
+    }
+
+    getShortcut(id) {
+      const shortcut = this.shortcuts.find(s => s.id === id);
+      return `${shortcut.title} (${shortcut.key})`;
     }
 
     moveStartTime(index, delta) {
@@ -272,32 +355,19 @@ window.addEventListener('load', _ => {
         }
       );
     }
-
-    getShortcut(id) {
-      const shortcut = this.shortcuts.find(s => s.id === id);
-      return `${shortcut.title} (${shortcut.key})`;
+    
+    revealStamp(index) {
+      const stampInput = document.querySelector(`input[data-index="${index}"]`);
+      stampInput.scrollIntoView({ block: 'center' });
+      stampInput.focus();
     }
 
-    getPlayer(type) {
-      if (type === 'audio') return audio;
-      if (type === 'video') return video;
-      throw new Error(`Unexpected media type ${type}. Expected 'audio' or 'video'.`);
-    }
-
-    renderRange(stamp) {
-      if (stamp.endTime !== undefined) {
-        return ` between ${getTimestamp(stamp.startTime)} and ${getTimestamp(stamp.endTime)}.`;
-      }
-
-      return ` from ${getTimestamp(stamp.startTime)}.`;
+    persistStamps() {
+      // Persist the stamps in local storage to recall in case the same song gets opened again
+      localStorage.setItem(`timestamper-${this.state.media.name}`, JSON.stringify(this.state.stamps));
     }
 
     componentDidMount() {
-      // Focus the text input of the pivot stamp
-      if (this.state.pivotStampIndex !== undefined) {
-        document.querySelector(`input[data-index="${pivotStampIndex}"]`).focus();
-      }
-
       // Note that `timeupdate` is too infrequent (Firefox ~300 ms, Chrome ~200 ms, Safari N/A) so we use RAF instead
       const raf = () => {
         this.forceUpdate();
@@ -357,11 +427,6 @@ window.addEventListener('load', _ => {
         event.stopPropagation();
         return false;
       }, true /* Listen to the event before it hits event targets */);
-    }
-
-    persistStamps() {
-      // Persist the stamps in local storage to recall in case the same song gets opened again
-      localStorage.setItem(`timestamper-${this.state.name}`, JSON.stringify(this.state.stamps));
     }
   }
 

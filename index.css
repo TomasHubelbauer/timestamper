@@ -1,14 +1,18 @@
 body {
     font-family: sans-serif;
+    margin: 0 1em 50vh 1em;
+}
+
+#panelDiv {
+    background: white;
+    position: sticky;
+    top: 0;
 }
 
 #mediaMedio {
+    /* Prevent videos with weird aspect ratios from messing up the app */
+    max-height: 50vw;
     width: 100%;
-}
-
-#previewDiv {
-    height: 4em;
-    overflow: auto;
 }
 
 #editorDiv {
@@ -16,19 +20,13 @@ body {
     align-items: center;
 }
 
-.stampDiv {
-    display: flex;
-    align-items: center;
+.previewDiv {
+    display: inline-flex;
+    flex-direction: column;
 }
 
-.stampInput {
-    margin: 0 0 1em 0;
-    width: 100%;
-}
-
-.pivotStampDiv {
-    background: lightblue;
-    outline: lightblue;
+.previewDiv span {
+    white-space: pre;
 }
 
 .timeSpan {
@@ -36,6 +34,22 @@ body {
     white-space: pre;
 }
 
-#saveButton {
+#helpButton {
     margin-left: auto;
+}
+
+.stampDiv {
+    display: flex;
+    flex-direction: column;
+    margin: 1ex 0;
+}
+
+.toolDiv {
+    display: flex;
+    align-items: center;
+}
+
+.pivotStampDiv {
+    background: lightblue;
+    outline: lightblue;
 }
