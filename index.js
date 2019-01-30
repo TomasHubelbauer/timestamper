@@ -12,11 +12,13 @@ window.addEventListener('load', _ => {
     return React.createElement(type, undefined, ...propsAndOrChildren);
   }
 
+  const a = (...propsAndOrChildren) => tag('a', propsAndOrChildren);
   const audio = (props) => React.createElement('audio', props);
   const button = (...propsAndOrChildren) => tag('button', propsAndOrChildren);
   const div = (...propsAndOrChildren) => tag('div', propsAndOrChildren);
   const h1 = (...propsAndOrChildren) => tag('h1', propsAndOrChildren);
   const input = (props) => React.createElement('input', props);
+  const p = (...propsAndOrChildren) => tag('p', propsAndOrChildren);
   const progress = (props) => React.createElement('progress', props);
   const span = (...propsAndOrChildren) => tag('span', propsAndOrChildren);
 
@@ -261,6 +263,10 @@ window.addEventListener('load', _ => {
       return div({},
         !this.state.media && h1('Timestamper'),
         !this.state.media && input({ type: 'file', accept: 'audio/*,video/*', onChange: this.onMediaInputChange }),
+        !this.state.media && p(
+          'Copyright © Tomas Hubelbauer ·',
+          a({ href: 'https://github.com/TomasHubelbauer/timestamper', target: '_blank' }, 'GitHub repository'),
+        ),
         this.state.media && div({ id: 'panelDiv' },
           // Prevent the audio/video from taking focus with negative tab index in order not to break the Enter & Space keyboard shortcuts
           // Mind the audio/video ID as it is used for styling
