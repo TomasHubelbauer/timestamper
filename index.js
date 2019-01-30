@@ -4,7 +4,8 @@ window.addEventListener('load', _ => {
       return React.createElement(type);
     }
 
-    if (typeof propsAndOrChildren[0] === 'object') {
+    // Accepts object as props as long as it is not a React element instance ($$typeof === Symbol)
+    if (typeof propsAndOrChildren[0] === 'object' && !propsAndOrChildren[0].$$typeof) {
       return React.createElement(type, propsAndOrChildren[0], ...propsAndOrChildren.slice(1));
     }
 
@@ -24,7 +25,10 @@ window.addEventListener('load', _ => {
       super(props);
       this.state = {
         media: undefined,
-        stamps: [],
+        voices: [
+          { name: 'sole', stamps: [] }
+        ],
+        selectedVoiceIndex: 0,
         snippet: undefined,
       };
 
@@ -47,7 +51,7 @@ window.addEventListener('load', _ => {
         }
 
         // Prevent accidental file replacement causing stamp data loss by requiring a confirmation
-        if (this.state.stamps.length > 0 && !confirm('Do you really want to abandon the existing collected timestamps?')) {
+        if (this.state.voices.find(voice => voice.stamps.length > 0) && !confirm('Do you really want to abandon the existing collected timestamps?')) {
           return;
         }
     
@@ -55,11 +59,11 @@ window.addEventListener('load', _ => {
         this.setState({ media: { type: match[1], src: URL.createObjectURL(file), name: file.name } });
         
         // See if we have persisted any stamps for the file being opened
-        const stamps = localStorage.getItem(`timestamper-${file.name}`);
-        if (stamps !== null) {
-          this.setState({ stamps: JSON.parse(stamps) }, () => {
+        const draft = localStorage.getItem(`timestamper-${file.name}`);
+        if (draft !== null) {
+          this.setState({ voices: JSON.parse(draft), selectedVoiceIndex: 0 }, () => {
             // Focus the text input of the pivot stamp
-            const pivotStampIndex = this.getPivotIndex(this.state.stamps);
+            const pivotStampIndex = this.getPivotIndex(this.state.voices[this.state.selectedVoiceIndex].stamps);
             if (pivotStampIndex !== -1) {
               document.querySelector(`input[data-index="${pivotStampIndex}"]`).focus();
               document.querySelector(`input[data-index="${pivotStampIndex}"]`).click();
@@ -88,9 +92,9 @@ window.addEventListener('load', _ => {
         let index;
         // Sort the stamps to always be chronological no matter the order they were entered in
         this.setState(state => {
-          const stamps = [...state.stamps, stamp].sort((a, b) => a.time - b.time);
+          const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps, stamp ].sort((a, b) => a.time - b.time);
           index = stamps.indexOf(stamp);
-          return { stamps };
+          return { voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
         }, () => {
           this.revealStamp(index);
           this.persistStamps();
@@ -100,8 +104,9 @@ window.addEventListener('load', _ => {
       this.onTimeEndButtonClick = _ => {
         let index;
         this.setState(state => {
-          index = this.getPivotIndex(state.stamps);
-          return { stamps: [...state.stamps.map((s, i) => i === index ? { ...s, endTime: this.playerMedioNode.currentTime } : s)] };
+          index = this.getPivotIndex(state.voices[state.selectedVoiceIndex].stamps);
+          const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.map((s, i) => i === index ? { ...s, endTime: this.playerMedioNode.currentTime } : s) ];
+          return { voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
         }, () => {
           this.revealStamp(index);
           this.persistStamps();
@@ -117,7 +122,7 @@ window.addEventListener('load', _ => {
       };
 
       this.onCloseButtonClick = _ => {
-        if (this.state.stamps.length > 0 && !confirm('Do you really want to close these stamps?')) {
+        if (this.state.voices.find(voice => voice.stamps.length > 0) && !confirm('Do you really want to close these stamps?')) {
           return;
         }
 
@@ -128,7 +133,7 @@ window.addEventListener('load', _ => {
       this.onExportJsonButtonClick = _ => {
         const downloadA = document.createElement('a');
         downloadA.download = this.state.media.name + '.stamps.json';
-        downloadA.href = `data:application/json;charset=utf8,` + encodeURIComponent(JSON.stringify({ name: this.state.media.name, stamps: this.state.stamps }, null, 2));
+        downloadA.href = `data:application/json;charset=utf8,` + encodeURIComponent(JSON.stringify({ name: this.state.media.name, voices: this.state.voices }, null, 2));
         document.body.appendChild(downloadA);
         downloadA.click();
         downloadA.remove();
@@ -137,7 +142,7 @@ window.addEventListener('load', _ => {
       this.onExportCsvButtonClick = _ => {
         const downloadA = document.createElement('a');
         downloadA.download = this.state.media.name + '.stamps.csv';
-        downloadA.href = `data:text/csv;charset=utf8,Start Time,End Time,Text\n` + encodeURIComponent(this.state.stamps.map(s => `${s.startTime},${s.endTime},${s.text}`).join('\n') + '\n');
+        downloadA.href = `data:text/csv;charset=utf8,Voice,Start Time,End Time,Text\n` + encodeURIComponent(this.state.voices.map(voice => voice.stamps.map(s => `${voice.name},${s.startTime},${s.endTime},${s.text}`).join('\n')).join('\n') + '\n');
         document.body.appendChild(downloadA);
         downloadA.click();
         downloadA.remove();
@@ -145,8 +150,8 @@ window.addEventListener('load', _ => {
 
       this.onLoopButtonClick = event => {
         const index = Number(event.currentTarget.dataset.index);
-        const stamp = this.state.stamps[index];
-        this.setState({ snippet: { stampIndex: index, loop: true } });
+        const stamp = this.state.voices[this.state.selectedVoiceIndex].stamps[index];
+        this.setState({ snippet: { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index, loop: true } });
         this.playerMedioNode.currentTime = stamp.startTime;
         // Ensure the playback is ongoing
         this.playerMedioNode.play();
@@ -195,13 +200,16 @@ window.addEventListener('load', _ => {
       this.onTextInputChange = event => {
         const index = Number(event.currentTarget.dataset.index);
         const text = event.currentTarget.value;
-        this.setState(state => ({ stamps: [...state.stamps.map((stamp, i) => i === index ? { ...stamp, text } : stamp)] }), this.persistStamps);
+        this.setState(state => {
+          const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.map((stamp, i) => i === index ? { ...stamp, text } : stamp) ];
+          return { voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
+        }, this.persistStamps);
       };
 
       this.onTextInputClick = event => {
         const index = Number(event.currentTarget.dataset.index);
-        const stamp = this.state.stamps[index];
-        this.setState({ snippet: { stampIndex: index } }, () => {
+        const stamp = this.state.voices[this.state.selectedVoiceIndex].stamps[index];
+        this.setState({ snippet: { voiceIndex: this.state.selectedVoiceIndex, stampIndex: index } }, () => {
           this.playerMedioNode.currentTime = stamp.startTime;
           this.playerMedioNode.play();
         });
@@ -209,26 +217,32 @@ window.addEventListener('load', _ => {
 
       this.onDeleteButtonClick = event => {
         const index = Number(event.currentTarget.dataset.index);
-        this.setState(state => ({ stamps: [...state.stamps.filter((_, i) => i !== index)] }), this.persistStamps);
+        this.setState(state => {
+          const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.filter((_, i) => i !== index) ];
+          return { voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
+        }, this.persistStamps);
       };
 
       this.shortcuts = [
         { key: 'Space', title: 'Toggle playback', context: ['page', 'player'], action: () => this.playerMedioNode.paused ? this.playerMedioNode.play() : this.playerMedioNode.pause() },
         { key: 'Ctrl+Space', title: 'Toggle playback (in editor)', context: ['editor'], action: () => this.playerMedioNode.paused ? this.playerMedioNode.play() : this.playerMedioNode.pause() },
         { key: 'Enter', id: 'open', title: 'Open a new stamp', context: ['page', 'player', 'editor'], action: this.onTimeStartButtonClick },
-        { key: 'Alt+Enter', id: 'close', title: 'Close the closets open stamp prior to current time', context: ['page', 'player', 'editor'], action: this.onTimeEndButtonClick },
+        { key: 'Ctrl+Enter', id: 'close', title: 'Close the closets open stamp prior to current time', context: ['page', 'player', 'editor'], action: this.onTimeEndButtonClick },
         { key: 'Ctrl+ArrowUp', title: 'Speed up the playback', context: ['page', 'player', 'editor'], action: () => this.playerMedioNode.playbackRate += .1 },
         { key: 'Ctrl+ArrowDown', title: 'Slow down the playback', context: ['page', 'player', 'editor'], action: () => this.playerMedioNode.playbackRate -= .1 },
+        { key: 'ArrowRight', title: 'Skip forwards 1 s', context: ['page', 'player'], action: () => this.playerMedioNode.currentTime += 1 },
+        { key: 'ArrowLeft', title: 'Skip backwards 1 s', context: ['page', 'player'], action: () => this.playerMedioNode.currentTime -= 1 },
         { key: 'ArrowUp', title: 'Go to the above text editor', context: ['editor'], action: (editorInput) => {
           const above = document.querySelector(`input[data-index="${Math.max(0, Number(editorInput.dataset.index) - 1)}"]`);
           above.focus();
           above.click();
         } },
         { key: 'ArrowDown', title: 'Go to the below text editor', context: ['editor'], action: (editorInput) => {
-          const below = document.querySelector(`input[data-index="${Math.min(this.state.stamps.length - 1, Number(editorInput.dataset.index) + 1)}"]`);
+          const below = document.querySelector(`input[data-index="${Math.min(this.state.voices[this.state.selectedVoiceIndex].stamps.length - 1, Number(editorInput.dataset.index) + 1)}"]`);
           below.focus();
           below.click();
         } },
+        { key: 'Ctrl+D', id: 'delete', title: 'Delete the given stamp', context: ['editor'], action: (editorInput) => this.onDeleteButtonClick({ currentTarget: editorInput }) },
         { key: 'Shift+Enter', id: 'loop', title: 'Loop preview the current stamp', context: ['editor'], action: (editorInput) => this.onLoopButtonClick({ currentTarget: editorInput }) },
         { key: 'Shift+Escape', id: 'stop', title: 'Stop loop preview if playing', context: ['editor'], action: this.onStopButtonClick },
         { key: 'Ctrl+ArrowLeft', id: 'start-back-100', title: 'Remove 100 ms off the start time', context: ['editor'], action: (editorInput) => this.onExtendStart100MillisecondsBackwardsButtonClick({ currentTarget: editorInput }) },
@@ -243,7 +257,7 @@ window.addEventListener('load', _ => {
     }
   
     render() {
-      const pivotStampIndex = this.playerMedioNode && this.getPivotIndex(this.state.stamps);
+      const pivotStampIndex = this.playerMedioNode && this.getPivotIndex(this.state.voices[this.state.selectedVoiceIndex].stamps);
       return div({},
         !this.state.media && h1('Timestamper'),
         !this.state.media && input({ type: 'file', accept: 'audio/*,video/*', onChange: this.onMediaInputChange }),
@@ -266,13 +280,14 @@ window.addEventListener('load', _ => {
             button({ onClick: this.onExportJsonButtonClick }, 'Export JSON'),
             
           ),
+          // TODO: Figure out why this breaks if I leave out the `{}` here
           this.playerMedioNode && div(
             this.state.snippet !== undefined && div(
-              `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex}`,
-              this.state.stamps[this.state.snippet.stampIndex].text && ` "${this.state.stamps[this.state.snippet.stampIndex].text}"`,
-              this.renderRange(this.state.stamps[this.state.snippet.stampIndex]),
+              `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex} from voice #${this.state.snippet.voiceIndex}`,
+              this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex].text && ` "${this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex].text}"`,
+              this.renderRange(this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex]),
             ),
-            this.state.stamps
+            this.state.voices[this.state.selectedVoiceIndex].stamps
               .filter(stamp => stamp.startTime < this.playerMedioNode.currentTime && stamp.endTime > this.playerMedioNode.currentTime)
               .map((stamp, index) => div({ key: index, className: 'previewDiv' },
                 span(stamp.text),
@@ -280,10 +295,12 @@ window.addEventListener('load', _ => {
               )),
           ),
         ),
-        this.state.stamps.map((stamp, index) => {
+        this.state.media && this.state.voices.map((voice, index) => button({ key: index, disabled: index === this.state.selectedVoiceIndex }, voice.name)),
+        this.state.media && button({ title: 'Add a new voice' }, '+'),
+        this.state.media && this.state.voices[this.state.selectedVoiceIndex].stamps.map((stamp, index) => {
           return div({ key: index, className: index === pivotStampIndex ? 'stampDiv pivotStampDiv' : 'stampDiv' },
             div({ className: 'toolDiv' },
-              this.state.snippet && this.state.snippet.stampIndex === index
+              (this.state.snippet && this.state.snippet.voiceIndex === this.state.selectedVoiceIndex && this.state.snippet.stampIndex === index)
                 ? button({ onClick: this.onStopButtonClick, title: this.getShortcut('stop') }, '■')
                 : button({ 'data-index': index, onClick: this.onLoopButtonClick, title: this.getShortcut('loop') }, '▶'),
               button({ 'data-index': index, onClick: this.onMoveStart100MillisecondsBackwardsButtonClick, title: this.getShortcut('start-back-100') }, '-100 ms'),
@@ -296,7 +313,7 @@ window.addEventListener('load', _ => {
               stamp.endTime && button({ 'data-index': index, onClick: this.onMoveEnd10MillisecondsBackwardsButtonClick, title: this.getShortcut('end-back-10') }, '-10 ms'),
               stamp.endTime && button({ 'data-index': index, onClick: this.onMoveEnd10MillisecondsForwardsButtonClick, title: this.getShortcut('end-forth-10') }, '+10 ms'),
               stamp.endTime && button({ 'data-index': index, onClick: this.onMoveEnd100MillisecondsForwardsButtonClick, title: this.getShortcut('end-forth-100') }, '+100 ms'),
-              button({ 'data-index': index, onClick: this.onDeleteButtonClick }, 'Delete'),
+              button({ 'data-index': index, onClick: this.onDeleteButtonClick, title: this.getShortcut('delete') }, 'Delete'),
               '#' + index,
             ),
             input({ value: stamp.text, 'data-index': index, onChange: this.onTextInputChange, onClick: this.onTextInputClick }),
@@ -311,6 +328,10 @@ window.addEventListener('load', _ => {
       }
 
       return ` from ${getTimestamp(stamp.startTime)}.`;
+    }
+
+    getStamps() {
+      return this.state.voices[this.state.selectedVoiceIndex].stamps;
     }
 
     getPlayer(type) {
@@ -332,12 +353,13 @@ window.addEventListener('load', _ => {
 
     moveStartTime(index, delta) {
       this.setState(
-        state => ({
-          snippet: { stampIndex: index, loop: state.snippet && state.snippet.loop },
-          stamps: [...state.stamps.map((stamp, i) => i === index ? { ...stamp, startTime: stamp.startTime + delta } : stamp)],
-        }),
+        state => {
+          const snippet = { stampIndex: index, loop: state.snippet && state.snippet.loop };
+          const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.map((stamp, i) => i === index ? { ...stamp, startTime: stamp.startTime + delta } : stamp) ];
+          return { snippet, voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
+        },
         () => {
-          this.playerMedioNode.currentTime = this.state.stamps[index].startTime;
+          this.playerMedioNode.currentTime = this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime;
           this.playerMedioNode.play();
         }
       );
@@ -345,12 +367,13 @@ window.addEventListener('load', _ => {
 
     moveEndTime(index, delta) {
       this.setState(
-        state => ({
-          snippet: { stampIndex: index, loop: state.snippet && state.snippet.loop },
-          stamps: [...state.stamps.map((stamp, i) => i === index ? { ...stamp, endTime: stamp.endTime ? stamp.endTime + delta : undefined } : stamp)],
-        }),
+        state => {
+          const snippet = { stampIndex: index, loop: state.snippet && state.snippet.loop };
+          const stamps = [ ...state.voices[state.selectedVoiceIndex].stamps.map((stamp, i) => i === index ? { ...stamp, endTime: stamp.endTime ? stamp.endTime + delta : undefined } : stamp) ];
+          return { snippet, voices: [ ...state.voices.map((voice, i) => i === state.selectedVoiceIndex ? { ...voice, stamps } : voice) ] };
+        },
         () => {
-          this.playerMedioNode.currentTime = this.state.stamps[index].startTime;
+          this.playerMedioNode.currentTime = this.state.voices[this.state.selectedVoiceIndex].stamps[index].startTime;
           this.playerMedioNode.play();
         }
       );
@@ -364,7 +387,7 @@ window.addEventListener('load', _ => {
 
     persistStamps() {
       // Persist the stamps in local storage to recall in case the same song gets opened again
-      localStorage.setItem(`timestamper-${this.state.media.name}`, JSON.stringify(this.state.stamps));
+      localStorage.setItem(`timestamper-${this.state.media.name}`, JSON.stringify(this.state.voices));
     }
 
     componentDidMount() {
@@ -373,7 +396,7 @@ window.addEventListener('load', _ => {
         this.forceUpdate();
 
         if (this.state.snippet !== undefined) {
-          const stamp = this.state.stamps[this.state.snippet.stampIndex];
+          const stamp = this.state.voices[this.state.selectedVoiceIndex].stamps[this.state.snippet.stampIndex];
 
           if (this.state.snippet.loop) {
             // Confine the playback range to the start and end (if any) time of the stamp

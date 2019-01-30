@@ -23,7 +23,7 @@ open index.html
 - [ ] Make time stamps in the list editable - input with pattern
 - [ ] Implement a button for splitting the current line per word into multiple lines for word-level adjustments
 - [ ] Consider https://jsxdirect.com/
-- [ ] Add support for multiple voices (tabs with names)
+- [ ] Implement adding, removing and renaming voices
 - [ ] Add UI tests with Puppeteer running in Azure Pipelines
 - [ ] Implement mobile friendly responsive design
 - [ ] Apply the answer of the [`progress` minimal width question](https://stackoverflow.com/q/54431564/2715716)

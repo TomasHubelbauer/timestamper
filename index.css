@@ -5,6 +5,8 @@ body {
 
 #panelDiv {
     background: white;
+    /* Prevent the panel from jumping while it is not sticky yet */
+    min-height: 20vh;
     position: sticky;
     top: 0;
 }
