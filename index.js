@@ -286,6 +286,7 @@ window.addEventListener('load', _ => {
             button({ onClick: this.onExportJsonButtonClick }, 'Export JSON'),
           ),
           this.playerMedioNode && this.playerMedioNode.duration && div(
+            this.state.snippet === undefined && (this.playerMedioNode.paused ? 'Paused' : 'Playing the whole song'),
             this.state.snippet !== undefined && div(
               `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex} from voice #${this.state.snippet.voiceIndex}`,
               this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex].text && ` "${this.state.voices[this.state.snippet.voiceIndex].stamps[this.state.snippet.stampIndex].text}"`,
@@ -302,13 +303,17 @@ window.addEventListener('load', _ => {
                   },
                 },
                 stamp.text,
-                progress({ max: (stamp.endTime || this.playerMedioNode.duration) - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
+                (this.playerMedioNode.currentTime >= stamp.startTime && this.playerMedioNode.currentTime <= (stamp.endTime || this.playerMedioNode.duration)) &&
+                  progress({ max: (stamp.endTime || this.playerMedioNode.duration) - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
               )),
             ),
           ),
+          'Voice: ',
+          this.state.voices.map((voice, index) => button({ key: index, disabled: index === this.state.selectedVoiceIndex }, voice.name)),
+          button({ title: 'Add a new voice' }, '+'),
+          button({ title: 'Delete this voice' }, '-'),
+          button({ title: 'Rename this voice' }, 'Rename'),
         ),
-        this.state.media && this.state.voices.map((voice, index) => button({ key: index, disabled: index === this.state.selectedVoiceIndex }, voice.name)),
-        this.state.media && button({ title: 'Add a new voice' }, '+'),
         this.state.media && this.state.voices[this.state.selectedVoiceIndex].stamps.map((stamp, index) => {
           return div({ key: index, className: index === pivotStampIndex ? 'stampDiv pivotStampDiv' : 'stampDiv' },
             div({ className: 'toolDiv' },
@@ -426,7 +431,7 @@ window.addEventListener('load', _ => {
               this.playerMedioNode.currentTime = stamp.startTime;
             } else if (this.playerMedioNode.currentTime > stamp.endTime) {
               this.playerMedioNode.pause();
-              this.playerMedioNode.currentTime = stamp.startTime;
+              this.playerMedioNode.currentTime = stamp.endTime || stamp.startTime;
               this.setState({ snippet: undefined });
             }
           }

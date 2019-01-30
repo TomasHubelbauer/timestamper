@@ -5,8 +5,6 @@ body {
 
 #panelDiv {
     background: white;
-    /* Prevent the panel from jumping while it is not sticky yet */
-    min-height: 20vh;
     position: sticky;
     top: 0;
 }
@@ -23,6 +21,7 @@ body {
 }
 
 #lyricsDiv {
+    background: linear-gradient(to right, transparent 49.9%, silver 49.9%, silver 50.1%, transparent 50.1%);
     height: 10vh;
     overflow: hidden;
     position: relative;
