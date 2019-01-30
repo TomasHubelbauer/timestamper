@@ -26,9 +26,4 @@ open index.html
 - [ ] Implement adding, removing and renaming voices
 - [ ] Add UI tests with Puppeteer running in Azure Pipelines
 - [ ] Implement mobile friendly responsive design
-- [ ] Consider animating the items on a horizontal timeline in preview
-  - Items slide from right to left
-  - Items fade in and out of existence near the edges of the screen
-  - Progress bar only shown for the currently interested item(s)
-  - Virtual vertical line representing current time goes through the vertical middle axis of the area
 - [ ] Create an interactive guide for the landing page showing the flow and highlighting what shortcuts are used
