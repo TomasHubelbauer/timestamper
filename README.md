@@ -26,7 +26,6 @@ open index.html
 - [ ] Implement adding, removing and renaming voices
 - [ ] Add UI tests with Puppeteer running in Azure Pipelines
 - [ ] Implement mobile friendly responsive design
-- [ ] Apply the answer of the [`progress` minimal width question](https://stackoverflow.com/q/54431564/2715716)
 - [ ] Consider animating the items on a horizontal timeline in preview
   - Items slide from right to left
   - Items fade in and out of existence near the edges of the screen

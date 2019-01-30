@@ -31,6 +31,12 @@ body {
     white-space: pre;
 }
 
+.previewDiv progress {
+    /* `width: auto` doesn't work in Firefox so we need to use the combo of `min-width` and `width` */
+    min-width: 100%;
+    width: 0;
+}
+
 .timeSpan {
     font-family: monospace;
     white-space: pre;

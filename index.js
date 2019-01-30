@@ -286,7 +286,6 @@ window.addEventListener('load', _ => {
             button({ onClick: this.onExportJsonButtonClick }, 'Export JSON'),
             
           ),
-          // TODO: Figure out why this breaks if I leave out the `{}` here
           this.playerMedioNode && div(
             this.state.snippet !== undefined && div(
               `${this.state.snippet.loop ? 'Looping' : 'Playing'} a snippet of a stamp #${this.state.snippet.stampIndex} from voice #${this.state.snippet.voiceIndex}`,
@@ -296,7 +295,7 @@ window.addEventListener('load', _ => {
             this.state.voices[this.state.selectedVoiceIndex].stamps
               .filter(stamp => stamp.startTime < this.playerMedioNode.currentTime && stamp.endTime > this.playerMedioNode.currentTime)
               .map((stamp, index) => div({ key: index, className: 'previewDiv' },
-                span(stamp.text),
+                stamp.text,
                 stamp.endTime && progress({ max: stamp.endTime - stamp.startTime, value: this.playerMedioNode.currentTime - stamp.startTime }),
               )),
           ),
